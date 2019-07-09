@@ -1,0 +1,15 @@
+.idea
+gua.log.txt
+*.pyc
+secret.py
+database_secret.conf
+gua_profile.out
+gua_profile.pstat
+*.md
+*.sh
+gua_profile.py
+forum.nginx
+forum.conf
+config.py
+misc
+output.png
