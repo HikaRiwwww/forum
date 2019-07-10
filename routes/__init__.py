@@ -1,4 +1,5 @@
 import uuid
+import redis
 from functools import wraps
 
 from flask import session, request, abort
@@ -12,7 +13,8 @@ def current_user():
     return u
 
 
-csrf_tokens = dict()
+cache = redis.StrictRedis()
+
 
 
 def csrf_required(f):
@@ -20,8 +22,9 @@ def csrf_required(f):
     def wrapper(*args, **kwargs):
         token = request.args['token']
         u = current_user()
-        if token in csrf_tokens and csrf_tokens[token] == u.id:
-            csrf_tokens.pop(token)
+        token_id = cache.get(token)
+        # if token in csrf_tokens and csrf_tokens[token] == u.id:
+        if token_id == u.id:
             return f(*args, **kwargs)
         else:
             abort(401)
@@ -33,5 +36,5 @@ def new_csrf_token():
     u = current_user()
     if u:
         token = str(uuid.uuid4())
-        csrf_tokens[token] = u.id
+        cache.set(token, u.id)
         return token

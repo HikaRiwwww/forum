@@ -1,6 +1,6 @@
 import os
 import uuid
-
+from . import new_csrf_token, cache
 from flask import (
     render_template,
     request,
@@ -12,21 +12,15 @@ from flask import (
     abort,
     send_from_directory
 )
+from config import admin_mail
+from models.message import send_mail
 from werkzeug.datastructures import FileStorage
-from werkzeug.utils import secure_filename
-
 from models.reply import Reply
 from models.topic import Topic
 from models.user import User
 from routes import current_user
-
 import json
 
-import redis
-
-cache = redis.StrictRedis()
-
-from utils import log
 
 main = Blueprint('index', __name__)
 
@@ -155,3 +149,69 @@ def image(filename):
 def user_info(username):
     u = User.one(username=username)
     return render_template('user_info.html', user=u)
+
+
+@main.route('/settings')
+def settings():
+    u = current_user()
+    if u:
+        csrf = new_csrf_token()
+        return render_template('settings.html', user=u, csrf_token=csrf)
+    else:
+        return redirect(url_for('index'))
+
+
+@main.route('/change_sign', methods=['POST'])
+def change_sign():
+    form = request.form.to_dict()
+    print('....', form)
+    name = form['name']
+    csrf = form['_csrf']
+    sign = form['sign']
+    user_id = cache.get(csrf)
+    print('****userid', user_id)
+    u = User.one(id=user_id)
+    if u.username == name:
+        u.sign = sign
+        u.save()
+        return redirect(url_for('index.settings'))
+    else:
+        abort(401)
+
+@main.route('/email_changepass', methods=['POST'])
+def email_changepass():
+    u = current_user()
+    reciever = u.email
+    token = new_csrf_token()
+    content = '请点击下面的链接重置您的密码\n{}{}'.format(
+        'http://localhost:3000/chagepassword?token=',
+        token
+    )
+    print('邮件内容:', content)
+    send_mail(subject='重置您的密码',
+              author=admin_mail,
+              to=reciever,
+              content=content)
+    return redirect(url_for('index.settings'))
+
+
+@main.route('/chagepassword', methods=['GET', 'POST'])
+def changepassword():
+    token = request.args.get('token')
+    user_id = cache.get(token).decode()
+    if user_id:
+        return render_template('changepassword.html', user_id=user_id)
+    else:
+        abort(404)
+
+@main.route('/submit_new_pass', methods=['POST'])
+def submit_new_pass():
+    new_pass = request.form.get('new_pass')
+    user_id = request.form.get('user_id')
+    u = User.one(id=user_id)
+    u.password = User.salted_password(new_pass)
+    u.save()
+    message = '修改密码成功'
+    return render_template('changepassword.html', user_id=user_id, message=message)
+
+
